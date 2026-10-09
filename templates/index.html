@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Banco Dcomp | Sistema bancário</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="topo">
+        <a class="marca" href="{{ url_for('inicio') }}">
+            <span class="marca-icone">D</span>
+            <span>Banco <strong>Dcomp</strong><small>Sistema bancário</small></span>
+        </a>
+        <span class="status"><span></span> Protótipo acadêmico</span>
+    </header>
+
+    <main class="pagina">
+        <section class="boas-vindas">
+            <div>
+                <p class="sobretitulo">PAINEL DO BANCO</p>
+                <h1>Olá, seja bem-vindo.</h1>
+                <p>Gerencie clientes, contas e movimentações em um só lugar.</p>
+            </div>
+            <div class="resumo">
+                <div><span>Clientes</span><strong>{{ clientes|length }}</strong></div>
+                <div><span>Contas ativas</span><strong>{{ contas|length }}</strong></div>
+            </div>
+        </section>
+
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <div class="mensagens" aria-live="polite">
+                    {% for categoria, mensagem in mensagens %}
+                        <p class="mensagem {{ categoria }}">{{ mensagem }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <section class="grade-formularios">
+            <article class="cartao">
+                <div class="titulo-cartao"><span class="icone">＋</span><div><h2>Novo cliente</h2><p>Cadastre os dados do cliente.</p></div></div>
+                <form action="{{ url_for('cadastrar_cliente') }}" method="post">
+                    <label for="nome">Nome completo</label>
+                    <input id="nome" name="nome" type="text" placeholder="Ex.: Ana Souza" required>
+                    <div class="linha-campos">
+                        <div><label for="cpf">CPF</label><input id="cpf" name="cpf" type="text" inputmode="numeric" minlength="11" maxlength="11" pattern="[0-9]{11}" placeholder="Somente números" required></div>
+                        <div><label for="idade">Idade</label><input id="idade" name="idade" type="number" min="0" placeholder="Ex.: 25" required></div>
+                    </div>
+                    <button type="submit">Cadastrar cliente</button>
+                </form>
+            </article>
+
+            <article class="cartao">
+                <div class="titulo-cartao"><span class="icone">▣</span><div><h2>Abrir conta</h2><p>Crie uma conta para um cliente cadastrado.</p></div></div>
+                <form action="{{ url_for('criar_conta') }}" method="post">
+                    <label for="cpf-conta">CPF do cliente</label>
+                    <input id="cpf-conta" name="cpf" type="text" inputmode="numeric" minlength="11" maxlength="11" pattern="[0-9]{11}" placeholder="Digite os 11 números do CPF" required>
+                    <label for="saldo-inicial">Saldo inicial <span class="opcional">opcional</span></label>
+                    <div class="campo-valor"><span>R$</span><input id="saldo-inicial" name="saldo_inicial" type="number" min="0" step="0.01" value="0.00" required></div>
+                    <button type="submit">Criar conta</button>
+                </form>
+            </article>
+
+            <article class="cartao consulta-cartao">
+                <div class="titulo-cartao"><span class="icone">⌕</span><div><h2>Consultar conta</h2><p>Pesquise pelo número da conta.</p></div></div>
+                <form action="{{ url_for('buscar_conta') }}" method="post">
+                    <label for="numero-conta">Número da conta</label>
+                    <input id="numero-conta" name="numero" type="text" inputmode="numeric" value="{{ numero_consultado }}" placeholder="Ex.: 1001" required>
+                    <button type="submit">Buscar conta</button>
+                </form>
+                {% if conta_consultada %}
+                    <div class="detalhes-conta">
+                        <div class="detalhes-topo"><span>Conta {{ conta_consultada.numero }}</span><strong>R$ {{ "%.2f"|format(conta_consultada.saldo) }}</strong></div>
+                        <p><strong>{{ conta_consultada.nome }}</strong></p>
+                        <p>CPF {{ conta_consultada.cpf }} · {{ conta_consultada.idade }} anos</p>
+                        <div class="acoes-conta">
+                            <form action="{{ url_for('movimentar_conta', numero=conta_consultada.numero, operacao='depositar') }}" method="post">
+                                <label for="deposito">Depositar</label>
+                                <div class="campo-valor"><span>R$</span><input id="deposito" name="valor" type="number" min="0.01" step="0.01" placeholder="0,00" required></div>
+                                <button type="submit" class="botao-secundario">Fazer depósito</button>
+                            </form>
+                            <form action="{{ url_for('movimentar_conta', numero=conta_consultada.numero, operacao='sacar') }}" method="post">
+                                <label for="saque">Sacar</label>
+                                <div class="campo-valor"><span>R$</span><input id="saque" name="valor" type="number" min="0.01" step="0.01" placeholder="0,00" required></div>
+                                <button type="submit" class="botao-secundario">Fazer saque</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endif %}
+            </article>
+        </section>
+
+        <section class="secao-contas">
+            <div class="cabecalho-secao"><div><p class="sobretitulo">VISÃO GERAL</p><h2>Contas cadastradas</h2></div><span class="contador">{{ contas|length }} conta(s)</span></div>
+            {% if contas %}
+                <div class="tabela-wrapper">
+                    <table>
+                        <thead><tr><th>Conta</th><th>Cliente</th><th>CPF</th><th>Idade</th><th class="alinha-direita">Saldo</th><th></th></tr></thead>
+                        <tbody>
+                            {% for conta in contas %}
+                                <tr>
+                                    <td><span class="numero-conta">#{{ conta.numero }}</span></td>
+                                    <td class="nome-cliente">{{ conta.nome }}</td>
+                                    <td>{{ conta.cpf }}</td>
+                                    <td>{{ conta.idade }} anos</td>
+                                    <td class="saldo alinha-direita">R$ {{ "%.2f"|format(conta.saldo) }}</td>
+                                    <td><a class="link-conta" href="{{ url_for('inicio', numero=conta.numero) }}">Detalhes <span aria-hidden="true">→</span></a></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="vazio"><span>▤</span><strong>Nenhuma conta por aqui</strong><p>Cadastre um cliente e abra a primeira conta para começar.</p></div>
+            {% endif %}
+        </section>
+        <footer>Banco Dcomp · Protótipo desenvolvido com Flask</footer>
+    </main>
+</body>
+</html>

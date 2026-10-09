@@ -1,177 +1,132 @@
-def cadastrar():
-    nome = input("Digite o nome do cliente:\n ")
+from decimal import Decimal, InvalidOperation
+from itertools import count
 
-    cpf = input("Digite o CPF do cliente:\n ")
+from flask import Flask, flash, redirect, render_template, request, url_for
 
-    while len(str(cpf)) != 11:
-      
-        print("O CPF deve conter 11 dígitos. Por favor, tente novamente.")
-        cpf = (input("Digite o CPF do cliente (somente números):\n "))
+app = Flask(__name__)
+app.secret_key = "banco-dcomp-prototipo"
 
-    idade = int(input("Digite a idade do cliente:\n "))
-
-    return nome, cpf, idade
+clientes = {}
+contas = {}
+proximo_numero_conta = count(1001)
 
 
-
-def criar_conta(nome, cpf, idade, numero_conta):
-    if nome == None or cpf == None or idade == None:
-        print("O cliente não pode criar uma conta, pois não possui todas as informações do cadastro.")
+def converter_valor(valor):
+    try:
+        quantia = Decimal(valor.replace(",", "."))
+    except (InvalidOperation, AttributeError):
         return None
+
+    if not quantia.is_finite():
+        return None
+
+    return quantia.quantize(Decimal("0.01"))
+
+
+@app.get("/")
+def inicio():
+    numero = request.args.get("numero", "").strip()
+    conta_consultada = contas.get(numero) if numero else None
+
+    if numero and conta_consultada is None:
+        flash("Conta não encontrada.", "erro")
+
+    return render_template(
+        "index.html",
+        clientes=clientes.values(),
+        contas=contas.values(),
+        conta_consultada=conta_consultada,
+        numero_consultado=numero,
+    )
+
+
+@app.post("/clientes")
+def cadastrar_cliente():
+    nome = request.form.get("nome", "").strip()
+    cpf = request.form.get("cpf", "").strip()
+    idade_texto = request.form.get("idade", "").strip()
+
+    if not nome or not cpf.isdigit() or len(cpf) != 11:
+        flash("Informe um nome e um CPF com exatamente 11 dígitos.", "erro")
+        return redirect(url_for("inicio"))
+
+    try:
+        idade = int(idade_texto)
+    except ValueError:
+        flash("Informe uma idade válida.", "erro")
+        return redirect(url_for("inicio"))
+
+    if idade < 0:
+        flash("A idade não pode ser negativa.", "erro")
+        return redirect(url_for("inicio"))
+
+    if cpf in clientes:
+        flash("Já existe um cliente cadastrado com esse CPF.", "erro")
+        return redirect(url_for("inicio"))
+
+    clientes[cpf] = {"nome": nome, "cpf": cpf, "idade": idade}
+    flash(f"Cliente {nome} cadastrado com sucesso.", "sucesso")
+    return redirect(url_for("inicio"))
+
+
+@app.post("/contas")
+def criar_conta():
+    cpf = request.form.get("cpf", "").strip()
+    cliente = clientes.get(cpf)
+
+    if cliente is None:
+        flash("Cliente não encontrado. Cadastre o cliente antes de criar a conta.", "erro")
+        return redirect(url_for("inicio"))
+
+    saldo = converter_valor(request.form.get("saldo_inicial", "0"))
+    if saldo is None or saldo < 0:
+        flash("Informe um saldo inicial válido e não negativo.", "erro")
+        return redirect(url_for("inicio"))
+
+    numero = str(next(proximo_numero_conta))
+    contas[numero] = {
+        **cliente,
+        "numero": numero,
+        "saldo": saldo,
+    }
+    flash(f"Conta {numero} criada para {cliente['nome']}.", "sucesso")
+    return redirect(url_for("inicio"))
+
+
+@app.post("/contas/buscar")
+def buscar_conta():
+    numero = request.form.get("numero", "").strip()
+    return redirect(url_for("inicio", numero=numero))
+
+
+@app.post("/contas/<numero>/<operacao>")
+def movimentar_conta(numero, operacao):
+    conta = contas.get(numero)
+    if conta is None:
+        flash("Conta não encontrada.", "erro")
+        return redirect(url_for("inicio"))
+
+    if operacao not in {"depositar", "sacar"}:
+        return "Operação inválida.", 404
+
+    valor = converter_valor(request.form.get("valor", ""))
+    if valor is None or valor <= 0:
+        flash("Informe um valor válido e maior que zero.", "erro")
+        return redirect(url_for("inicio", numero=numero))
+
+    if operacao == "sacar" and valor > conta["saldo"]:
+        flash("Saldo insuficiente para realizar o saque.", "erro")
+        return redirect(url_for("inicio", numero=numero))
+
+    if operacao == "depositar":
+        conta["saldo"] += valor
+        flash(f"Depósito de R$ {valor:.2f} realizado com sucesso.", "sucesso")
     else:
-        print(f"Criando conta para o cliente {nome} ...\n\n\n")
-        saldo = 0.0
-        saldo = float(input("Digite o saldo inicial da conta:\n "))
-        print(f"Conta criada com sucesso para o cliente {nome}\n")
-        print(f"Informações da conta:\n Nome: {nome}\n CPF: {cpf}\n Idade: {idade}\n Saldo: {saldo}\n Conta: {numero_conta}\n\n\n")
+        conta["saldo"] -= valor
+        flash(f"Saque de R$ {valor:.2f} realizado com sucesso.", "sucesso")
 
-    return nome, cpf, idade, saldo, numero_conta
+    return redirect(url_for("inicio", numero=numero))
 
-
-
-def mostrar_saldo(saldo):
-            print(f"O saldo atual da conta é: R$ {saldo:.2f}")
-
-            return saldo
-
-
-def depositar(saldo):
-    valor = float(input("Digite o valor a ser depositado:\n"))
-    saldo += valor
-    print(f"Deposito realizado, saldo atual:\n R$ {saldo:.2f}")
-
-    return saldo
-
-def sacar(saldo):
-     valor = float(input("Digite o valor que deseja sacar:\n"))
-     if valor > saldo:
-          print(f"O valor que deseja sacar é maior que o saldo atual: {saldo:.2f}\n tente novamente.")
-     else:
-          saldo -= valor
-          print(f"Saque realizado com sucesso!!")
-
-          return saldo
-     
-def procurar_cliente(clientes, cpf):
-    i = 0
-
-    while i < len(clientes):
-        if clientes[i][1] == cpf:
-            return clientes[i]
-
-        i += 1
-
-    return None
-
-def procurar_conta(contas, numero):
-    i = 0
-
-    while i < len(contas):
-        if contas[i][4] == numero:
-            return contas[i]
-
-        i += 1
-
-    return None
-
-def listar_contas(contas):
-    if len(contas) == 0:
-        print("Nenhuma conta cadastrada.")
-    else:
-        print("\n===== CONTAS CADASTRADAS =====")
-
-        i = 0
-
-        while i < len(contas):
-            print(f"Conta: {contas[i][4]}")
-            print(f"Nome: {contas[i][0]}")
-            print(f"CPF: {contas[i][1]}")
-            print(f"Idade: {contas[i][2]}")
-            print(f"Saldo: R$ {contas[i][3]:.2f}")
-            print("-----------------------------")
-
-            i += 1     
-
-     
-def main():
-    clientes = []
-    contas = []
-    numero_conta = 1001
-    opcao = 0
-
-
-    print(" Bem- vindo ao Banco Dcomp! \n")
-
-    while opcao != 8:
-
-      opcao = int(input("Digite a opção desejada:\n 1 - Cadastrar cliente\n 2 - Criar conta\n 3 - Listar contas\n 4 - Procurar conta\n 5 - Consultar saldo\n 6 - Depositar\n 7 - Sacar\n 8 - Sair\n"))
-
-      if opcao == 1:
-        cliente = cadastrar()
-        clientes.append(cliente)
-
-      elif opcao == 2:
-          cpf = input("Digite o CPF do cliente:\n ")
-          cliente = procurar_cliente(clientes, cpf)
-
-          if cliente == None:
-            print("Cliente não encontrado.")
-          else:
-            conta = criar_conta(
-            cliente[0],
-            cliente[1],
-            cliente[2],
-            numero_conta
-        )
-
-          if conta != None:
-            contas.append(conta)
-            numero_conta += 1
-            
-      elif opcao == 3:
-        listar_contas(contas)
-
-      elif opcao == 4:
-       numero = int(input("Digite o número da conta:\n "))
-       conta = procurar_conta(contas, numero)
-
-       if conta == None:
-          print("Conta não encontrada.")
-       else:
-          print(f"Conta: {conta[4]}")
-          print(f"Nome: {conta[0]}")
-          print(f"CPF: {conta[1]}")
-          print(f"Idade: {conta[2]}")
-          print(f"Saldo: R$ {conta[3]:.2f}")
-
-      elif opcao == 5:
-       numero = int(input("Digite o número da conta:\n "))
-       conta = procurar_conta(contas, numero)
-
-       if conta == None:
-        print("Conta não encontrada.")
-       else:
-        mostrar_saldo(conta[3])
-
-      elif opcao == 6:
-           numero = int(input("Digite o número da conta:\n "))
-           conta = procurar_conta(contas, numero)
-
-           if conta == None:
-            print("Conta não encontrada.")
-           else:
-            conta[3] = depositar(conta[3])
-
-      elif opcao == 7:
-       numero = int(input("Digite o número da conta:\n "))
-       conta = procurar_conta(contas, numero)
-
-       if conta == None:
-         print("Conta não encontrada.")
-       else:
-        conta[3] = sacar(conta[3])
-      elif opcao == 8:
-        print("Saindo do sistema...") 
 
 if __name__ == "__main__":
-    main()
+    app.run()
